@@ -15,23 +15,4 @@ class ColossusManager(name:String) extends Component(name) {
    * @return
    */
   override def receive = super.receive
-
-  /**
-   * Start function will start any child actors that will be managed by the ComponentManager
-    *
-    * @return
-   */
-  override def start = {
-    super.start
-  }
-
-  /**
-   * Stop will execute any cleanup work to be done for the child actors
-   * if not necessary this can be deleted
-    *
-    * @return
-   */
-  override def stop = {
-    super.stop
-  }
 }
