@@ -1,5 +1,6 @@
 package com.webtrends.harness.component.colossus.command
 
+import akka.pattern.ask
 import colossus.protocols.http.HttpMethod.Get
 import colossus.protocols.http.HttpRequest
 import colossus.protocols.http.UrlParsing._
@@ -8,7 +9,6 @@ import com.webtrends.harness.command.Command
 import com.webtrends.harness.health.{ApplicationHealth, ComponentState, HealthRequest, HealthResponseType}
 import org.json4s.DefaultFormats
 import org.json4s.ext.{EnumNameSerializer, JodaTimeSerializers}
-import akka.pattern.ask
 
 import scala.concurrent.Future
 
@@ -28,6 +28,8 @@ class CoreColossusCommand extends Command with ColossusCommand {
         ColossusResponse(ah)
       }
   }
+
+  override def routeExposure = RouteExposure.INTERNAL
 }
 
 object CoreColossusCommand {

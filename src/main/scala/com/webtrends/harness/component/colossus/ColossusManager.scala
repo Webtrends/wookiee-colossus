@@ -6,21 +6,22 @@ package com.webtrends.harness.component.colossus
 
 import akka.actor.ActorSystem
 import colossus.IOSystem
-import colossus.core.{ServerContext, ServerRef, ServerSettings}
+import colossus.core.server.Server.ServerInfo
+import colossus.core.server.ServerStatus.Bound
+import colossus.core.{InitContext, ServerContext, ServerRef, ServerSettings}
 import colossus.metrics.{MetricReporterConfig, MetricSystem, OpenTsdbSender}
+import colossus.protocols.http.HttpHeaders
 import colossus.protocols.http.server.{HttpServer, Initializer, RequestHandler}
-import colossus.protocols.http.{HttpHeaders, _}
-import colossus.service.{Callback, ServiceConfig}
-import com.webtrends.harness.command.CommandHelper
+import colossus.service.ServiceConfig
+import com.webtrends.harness.command.{Command, CommandHelper}
 import com.webtrends.harness.component.Component
 import com.webtrends.harness.component.colossus.command.CoreColossusCommand
-import org.json4s.Formats
-import org.json4s.jackson.Serialization
+import com.webtrends.harness.component.colossus.handle.HttpRequestHandler
+import com.webtrends.harness.health.{ComponentState, HealthComponent}
 
-import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
-import scala.util.Try
-import scala.concurrent.ExecutionContext.Implicits
+import scala.concurrent.{ExecutionContextExecutor, Future, Promise}
+import scala.util.{Failure, Success, Try}
 
 class ColossusManager(name:String) extends Component(name) with CommandHelper {
   implicit val system: ActorSystem = context.system
@@ -33,11 +34,22 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
    *
    * @return
    */
-  override def receive: Receive = super.receive
+  override def receive: Receive = super.receive orElse {
+    // Add a command to our http routing
+    case (s: String, c: Class[_]) if classOf[Command].isAssignableFrom(c) =>
+      addCommand[Command](s, c.asInstanceOf[Class[Command]])
+  }
 
   override def start = {
     init()
     super.start
+  }
+
+
+  override def stop = {
+    ColossusManager.internalServerRef.foreach(_.die())
+    ColossusManager.externalServerRef.foreach(_.die())
+    super.stop
   }
 
   def init(): Unit = {
@@ -48,7 +60,12 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
     val metricsHost = Try(colConfig.getString("metric.host"))
       .getOrElse(if (metricsEnabled) throw new Exception("Must set metric.host if using metrics") else "")
     val metricsPort = Try(colConfig.getInt("metric.port")).getOrElse(4242)
-    val serverSettings = ServerSettings.extract(colConfig.getConfig("server"))
+    val serverConfig = colConfig.getConfig("server")
+
+    val internalServerSettings =
+      ServerSettings.extract(serverConfig.withFallback(colConfig.getConfig("internal-server")))
+    val externalServerSettings =
+      ServerSettings.extract(serverConfig.withFallback(colConfig.getConfig("external-server")))
     val serviceConfig = ServiceConfig.load(colConfig.getConfig("service.default"))
 
     implicit val io: IOSystem = if (metricsEnabled) {
@@ -62,46 +79,62 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
       IOSystem()
     }
 
-    ColossusManager.serverRef = Some(HttpServer.start(serviceName, serverSettings) { init =>
-      new Initializer(init) {
-        override val defaultHeaders: HttpHeaders = HttpHeaders()
-        override def onConnect: (ServerContext) => RequestHandler = serverContext => new HttpRequestHandler(
-          serverContext,
-          serviceConfig
-        )
-      }
-    })
+    ColossusManager.internalServerRef = Some(HttpServer.start(serviceName + "_internal",
+      internalServerSettings)(serverInit(serviceConfig, internal = true)))
+    ColossusManager.externalServerRef = Some(HttpServer.start(serviceName + "_external",
+      externalServerSettings)(serverInit(serviceConfig, internal = false)))
     addCommand(CoreColossusCommand.CommandName, classOf[CoreColossusCommand])
+  }
+
+  override def getHealth: Future[HealthComponent] = {
+    val intHealth = ColossusManager.internalServerRef.map(serverHealth).getOrElse(notStartedHealth)
+    val extHealth = ColossusManager.externalServerRef.map(serverHealth).getOrElse(notStartedHealth)
+    val p = Promise[HealthComponent]()
+    Future.sequence(List(intHealth, extHealth)) onComplete {
+      case Success(succ) =>
+        p success HealthComponent(self.path.toString, details = "Colossus Component Up", components = succ)
+      case Failure(f) =>
+        p success HealthComponent(self.path.toString, ComponentState.CRITICAL, "Could not get health of servers")
+    }
+    p.future
+  }
+
+  private val notStartedHealth = Future.successful(
+    HealthComponent(self.path.toString, ComponentState.CRITICAL, "could not find colossus server"))
+  private def serverHealth: ServerRef => Future[HealthComponent] = { serverRef =>
+    serverRef
+      .info()
+      .map {
+        case ServerInfo(openConnections, Bound) =>
+          HealthComponent(
+            serverRef.name.idString,
+            ComponentState.NORMAL,
+            s"colossus server: ServerInfo(openConnections=$openConnections, status=$Bound)"
+          )
+        case info =>
+          HealthComponent(
+            serverRef.name.idString,
+            ComponentState.CRITICAL,
+            s"colossus server: ServerInfo(openConnections=${info.openConnections}, status=${info.status})"
+          )
+      }
+  }
+
+  private def serverInit(serviceConfig: ServiceConfig, internal: Boolean): InitContext => Initializer = { init =>
+    new Initializer(init) {
+      override val defaultHeaders: HttpHeaders = HttpHeaders()
+      override def onConnect: (ServerContext) => RequestHandler = serverContext => new HttpRequestHandler(
+        serverContext, serviceConfig, internal
+      )
+    }
   }
 }
 
 object ColossusManager {
   val ComponentName = "wookiee-colossus"
-  protected[colossus] var serverRef: Option[ServerRef] = None
+  protected[colossus] var internalServerRef: Option[ServerRef] = None
+  protected[colossus] var externalServerRef: Option[ServerRef] = None
 
-  def getServer = serverRef.getOrElse(throw new IllegalStateException("Colossus server not initialized"))
-}
-
-class HttpRequestHandler(context: ServerContext,
-                         config: ServiceConfig)(implicit execution: ExecutionContextExecutor = Implicits.global)
-  extends RequestHandler(context, config) {
-  import HttpBody._
-  val serialization = Serialization
-
-  override protected def handle: PartialFunction[HttpRequest, Callback[HttpResponse]] = {
-    ExternalColossusRouteContainer.getRouteFunction.andThen[Callback[HttpResponse]]({ colResp =>
-      Callback.fromFuture(colResp map { resp =>
-        HttpResponse(HttpResponseHead(HttpVersion.`1.1`,
-          resp.code, resp.headers), marshall(resp.body, resp.formats, resp.responseType))
-      })
-    }).orElse[HttpRequest, Callback[HttpResponse]] { case req: HttpRequest =>
-      Callback.successful(HttpResponse(HttpResponseHead(HttpVersion.`1.1`,
-        HttpCodes.NOT_FOUND, HttpHeaders.Empty), s"This endpoint, ${req.head.path}, was not found."))
-    }
-  }
-
-  def marshall(body: AnyRef, fmt: Formats, responseType: String) = responseType match {
-    case "text/plain" => body.toString
-    case _ => serialization.write(body)(fmt)
-  }
+  def getInternalServer = internalServerRef.getOrElse(throw new IllegalStateException("Internal Colossus server not initialized"))
+  def getExternalServer = externalServerRef.getOrElse(throw new IllegalStateException("External Colossus server not initialized"))
 }
