@@ -1,17 +1,20 @@
 package com.webtrends.harness.component.colossus
 
+import akka.testkit.TestProbe
+import colossus.protocols.http.{HttpCodes, HttpRequest}
+import colossus.testkit.HttpServiceSpec
 import com.webtrends.harness.health.{ComponentState, HealthComponent}
 import com.webtrends.harness.service.messages.CheckHealth
 import com.webtrends.harness.service.test.TestHarness
 import com.webtrends.harness.service.test.config.TestConfig
-import org.scalatest.MustMatchers
-import akka.testkit.TestProbe
-import org.scalatest._
 
-class ColossusManagerTest extends WordSpec with MustMatchers {
-  val sys = TestHarness(ColossusManagerTest.config, None, Some(Map("wookiee-colossus" -> classOf[ColossusManager])))
-  implicit val system = TestHarness.system.get
-  val colManager = sys.getComponent("wookiee-colossus").get
+import scala.concurrent.Await
+import scala.concurrent.duration.FiniteDuration
+
+class ColossusManagerTest extends HttpServiceSpec {
+  val th = TestHarness(ColossusManagerTest.config, None, Some(Map("wookiee-colossus" -> classOf[ColossusManager])))
+  //implicit val thSystem = TestHarness.system.get
+  val colManager = th.getComponent("wookiee-colossus").get
 
   "ColossusManager" should {
     "be ready" in {
@@ -24,24 +27,62 @@ class ColossusManagerTest extends WordSpec with MustMatchers {
           false mustEqual true
       }
     }
+
+    "handle health check request" in {
+      expectCode(HttpRequest.get("/healthcheck"), HttpCodes.OK)
+    }
+
+    "handle not found case" in {
+      expectCode(HttpRequest.get("/nonexistent"), HttpCodes.NOT_FOUND)
+    }
   }
+
+  override def service = ColossusManager.getServer
+  override def requestTimeout = FiniteDuration(10000, "ms")
 }
 
 object ColossusManagerTest {
   val config = TestConfig.conf(
     """
       |wookiee-colossus {
-      |  // For healthcheck, metric, lb and other endpoints
-      |  internal-server {
-      |    enabled = true
-      |    interface = 0.0.0.0
-      |    http-port = 8080
-      |  }
+      |  service-name = "TestColossus"
+      |  metric {
+      |      enabled = false
+      |      name = "Colossus"
+      |      host = "graph.host.name"
+      |      port = 4242
+      |    }
       |
-      |  external-server {
-      |    interface = 0.0.0.0
-      |    http-port = 8082
-      |  }
+      |    server {
+      |      port = 9888
+      |      max-connections = 10000
+      |      max-idle-time = 3 seconds
+      |      highwater-max-idle-time = 3 seconds
+      |      shutdown-timeout = 5 seconds
+      |      tcp-backlog-size = 10000
+      |      low-watermark-percentage = 0.5
+      |      high-watermark-percentage = 0.9
+      |      slow-start {
+      |        enabled = false
+      |        initial = 10000
+      |        duration = 1 second
+      |      }
+      |      binding-retry {
+      |        type = "NONE"
+      |      }
+      |      delegator-creation-policy {
+      |        wait-time = 5 seconds
+      |        retry-policy.type = "NONE"
+      |      }
+      |    }
+      |
+      |    service.default {
+      |      request-timeout = 10 seconds
+      |      request-metrics = false
+      |      request-buffer-size = 100
+      |      log-errors = true
+      |      max-request-size = 50 MB
+      |    }
       |
       |  manager = "com.webtrends.harness.component.colossus.ColossusManager"
       |  enabled = true
