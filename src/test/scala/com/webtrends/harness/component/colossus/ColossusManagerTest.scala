@@ -2,18 +2,15 @@ package com.webtrends.harness.component.colossus
 
 import akka.testkit.TestProbe
 import colossus.protocols.http.{HttpCodes, HttpRequest}
-import colossus.testkit.HttpServiceSpec
-import com.typesafe.config.ConfigFactory
+import com.webtrends.harness.component.colossus.mock.MockColossusService
 import com.webtrends.harness.health.{ComponentState, HealthComponent}
 import com.webtrends.harness.service.messages.CheckHealth
-import com.webtrends.harness.service.test.TestHarness
-import com.webtrends.harness.service.test.config.TestConfig
 
 import scala.concurrent.duration.FiniteDuration
 
-class ColossusManagerTest extends HttpServiceSpec {
-  val th = TestHarness(ColossusManagerTest.config, None, Some(Map("wookiee-colossus" -> classOf[ColossusManager])))
-  val colManager = th.getComponent("wookiee-colossus").get
+class ColossusManagerTest extends MockColossusService {
+  def commands = List()
+  def wookieeService = None
 
   "ColossusManager" should {
     "be ready" in {
@@ -38,8 +35,4 @@ class ColossusManagerTest extends HttpServiceSpec {
 
   override def service = ColossusManager.getInternalServer
   override def requestTimeout = FiniteDuration(10000, "ms")
-}
-
-object ColossusManagerTest {
-  val config = ConfigFactory.parseResources("resources/reference.conf").withFallback(TestConfig.conf("wookiee-colossus.service-name = \"test-service\""))
 }

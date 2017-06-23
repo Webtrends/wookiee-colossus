@@ -4,7 +4,7 @@
  */
 package com.webtrends.harness.component.colossus
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorSystem, Props}
 import colossus.IOSystem
 import colossus.core.server.Server.ServerInfo
 import colossus.core.server.ServerStatus.Bound
@@ -38,6 +38,8 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
     // Add a command to our http routing
     case (s: String, c: Class[_]) if classOf[Command].isAssignableFrom(c) =>
       addCommand[Command](s, c.asInstanceOf[Class[Command]])
+    case (s: String, c: Class[_], args: List[Any]) if classOf[Command].isAssignableFrom(c) =>
+      addCommandWithProps(s, Props(c, args :_*))
   }
 
   override def start = {
@@ -53,37 +55,43 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
   }
 
   def init(): Unit = {
-    val colConfig = config.getConfig(ColossusManager.ComponentName)
-    val serviceName = colConfig.getString("service-name")
-    val metricsEnabled = Try(colConfig.getBoolean("metric.enabled")).getOrElse(false)
-    val metricsName = Try(colConfig.getString("metric.name")).getOrElse(serviceName)
-    val metricsHost = Try(colConfig.getString("metric.host"))
-      .getOrElse(if (metricsEnabled) throw new Exception("Must set metric.host if using metrics") else "")
-    val metricsPort = Try(colConfig.getInt("metric.port")).getOrElse(4242)
-    val serverConfig = colConfig.getConfig("server")
+    try {
+      val colConfig = config.getConfig(ColossusManager.ComponentName)
+      val serviceName = colConfig.getString("service-name")
+      val metricsEnabled = Try(colConfig.getBoolean("metric.enabled")).getOrElse(false)
+      val metricsName = Try(colConfig.getString("metric.name")).getOrElse(serviceName)
+      val metricsHost = Try(colConfig.getString("metric.host"))
+        .getOrElse(if (metricsEnabled) throw new Exception("Must set metric.host if using metrics") else "")
+      val metricsPort = Try(colConfig.getInt("metric.port")).getOrElse(4242)
+      val serverConfig = colConfig.getConfig("server")
 
-    val internalServerSettings =
-      ServerSettings.extract(serverConfig.withFallback(colConfig.getConfig("internal-server")))
-    val externalServerSettings =
-      ServerSettings.extract(serverConfig.withFallback(colConfig.getConfig("external-server")))
-    val serviceConfig = ServiceConfig.load(colConfig.getConfig("service.default"))
+      val internalServerSettings =
+        ServerSettings.extract(serverConfig.withFallback(colConfig.getConfig("internal-server")))
+      val externalServerSettings =
+        ServerSettings.extract(serverConfig.withFallback(colConfig.getConfig("external-server")))
+      val serviceConfig = ServiceConfig.load(colConfig.getConfig("service.default"))
 
-    implicit val io: IOSystem = if (metricsEnabled) {
-      val colossusMetricSystem = MetricSystem(metricsName)
-      val colossusMetricReporterConfig = MetricReporterConfig(Seq(OpenTsdbSender(
-        metricsHost, metricsPort
-      )))
-      colossusMetricSystem.collectionIntervals.get(1.minute).foreach(_.report(colossusMetricReporterConfig))
-      IOSystem(metricsName, config, Some(colossusMetricSystem))
-    } else {
-      IOSystem()
+      implicit val io: IOSystem = if (metricsEnabled) {
+        val colossusMetricSystem = MetricSystem(metricsName)
+        val colossusMetricReporterConfig = MetricReporterConfig(Seq(OpenTsdbSender(
+          metricsHost, metricsPort
+        )))
+        colossusMetricSystem.collectionIntervals.get(1.minute).foreach(_.report(colossusMetricReporterConfig))
+        IOSystem(metricsName, config, Some(colossusMetricSystem))
+      } else {
+        IOSystem()
+      }
+
+      ColossusManager.internalServerRef = Some(HttpServer.start(serviceName + "_internal",
+        internalServerSettings)(serverInit(serviceConfig, internal = true)))
+      ColossusManager.externalServerRef = Some(HttpServer.start(serviceName + "_external",
+        externalServerSettings)(serverInit(serviceConfig, internal = false)))
+      addCommand(CoreColossusCommand.CommandName, classOf[CoreColossusCommand])
+    } catch {
+      case ex: Throwable =>
+        log.error(ex, "Error starting up wookiee-colossus")
+        throw ex
     }
-
-    ColossusManager.internalServerRef = Some(HttpServer.start(serviceName + "_internal",
-      internalServerSettings)(serverInit(serviceConfig, internal = true)))
-    ColossusManager.externalServerRef = Some(HttpServer.start(serviceName + "_external",
-      externalServerSettings)(serverInit(serviceConfig, internal = false)))
-    addCommand(CoreColossusCommand.CommandName, classOf[CoreColossusCommand])
   }
 
   override def getHealth: Future[HealthComponent] = {
@@ -94,7 +102,7 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
       case Success(succ) =>
         p success HealthComponent(self.path.toString, details = "Colossus Component Up", components = succ)
       case Failure(f) =>
-        p success HealthComponent(self.path.toString, ComponentState.CRITICAL, "Could not get health of servers")
+        p success HealthComponent(self.path.toString, ComponentState.CRITICAL, s"Could not get health of servers: ${f.getMessage}")
     }
     p.future
   }
@@ -135,6 +143,8 @@ object ColossusManager {
   protected[colossus] var internalServerRef: Option[ServerRef] = None
   protected[colossus] var externalServerRef: Option[ServerRef] = None
 
-  def getInternalServer = internalServerRef.getOrElse(throw new IllegalStateException("Internal Colossus server not initialized"))
-  def getExternalServer = externalServerRef.getOrElse(throw new IllegalStateException("External Colossus server not initialized"))
+  def getInternalServer =
+    internalServerRef.getOrElse(throw new IllegalStateException("Internal Colossus server not initialized"))
+  def getExternalServer =
+    externalServerRef.getOrElse(throw new IllegalStateException("External Colossus server not initialized"))
 }

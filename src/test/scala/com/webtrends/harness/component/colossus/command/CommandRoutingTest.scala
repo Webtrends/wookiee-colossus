@@ -1,16 +1,11 @@
 package com.webtrends.harness.component.colossus.command
 
 import colossus.protocols.http.{HttpCodes, HttpRequest}
-import colossus.testkit.HttpServiceSpec
-import com.webtrends.harness.component.colossus.{ColossusManager, ColossusManagerTest}
-import com.webtrends.harness.service.test.TestHarness
+import com.webtrends.harness.component.colossus.mock.MockColossusService
 
-import scala.concurrent.duration.FiniteDuration
-
-class CommandRoutingTest extends HttpServiceSpec {
-  val th = TestHarness(ColossusManagerTest.config, None, Some(Map("wookiee-colossus" -> classOf[ColossusManager])))
-  val colManager = th.getComponent("wookiee-colossus").get
-  colManager ! ("TestCommand", classOf[TestCommand])
+class CommandRoutingTest extends MockColossusService {
+  def commands = List(("TestCommand", classOf[TestCommand], List()))
+  def wookieeService = None
 
   "Command routing" should {
     "handle a get request" in {
@@ -28,8 +23,11 @@ class CommandRoutingTest extends HttpServiceSpec {
     "can't hit health check on external server" in {
       expectCode(HttpRequest.get("/healthcheck"), HttpCodes.NOT_FOUND)
     }
-  }
 
-  override def service = ColossusManager.getExternalServer
-  override def requestTimeout = FiniteDuration(10000, "ms")
+    "use response getter" in {
+      val resp = returnResponse(HttpRequest.get("/goober/Value"))
+      resp.body.toString() mustEqual "getRespValue"
+      resp.code mustEqual HttpCodes.OK
+    }
+  }
 }
