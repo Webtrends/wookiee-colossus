@@ -1,10 +1,13 @@
 package com.webtrends.harness.component.colossus.command
 
-import colossus.protocols.http.{HttpCodes, HttpRequest}
+import java.net.InetAddress
+
+import colossus.protocols.http.{HttpCodes, HttpHeader, HttpRequest}
 import com.webtrends.harness.component.colossus.mock.MockColossusService
 
 class CommandRoutingTest extends MockColossusService {
-  def commands = List(("TestCommand", classOf[TestCommand], List()))
+  def commands = List(("TestCommand", classOf[TestCommand], List()),
+    ("TestCommandBoth", classOf[TestCommandBoth], List()))
   def wookieeService = None
 
   "Command routing" should {
@@ -39,6 +42,16 @@ class CommandRoutingTest extends MockColossusService {
     "bad response set as expected" in {
       val bad = ColossusResponse.badRequest(None)
       bad.code mustEqual HttpCodes.BAD_REQUEST
+    }
+
+    "put remote address on the response" in {
+      val resp = returnResponse(HttpRequest.get("/goober/Value"))
+      resp.head.headers.toSeq must contain(HttpHeader("Remote-Address", InetAddress.getLocalHost.getHostAddress))
+    }
+
+    "be able to hit a BOTH command" in {
+      val resp = returnResponse(HttpRequest.get("/goober"))
+      resp.code mustEqual HttpCodes.OK
     }
   }
 }
