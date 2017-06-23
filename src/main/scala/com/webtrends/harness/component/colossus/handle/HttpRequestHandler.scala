@@ -1,9 +1,11 @@
 package com.webtrends.harness.component.colossus.handle
 
+import akka.util.ByteString
 import colossus.core.ServerContext
 import colossus.protocols.http.server.RequestHandler
-import colossus.protocols.http.{HttpBody, HttpBodyEncoder, HttpCodes, HttpHeader, HttpHeaders, HttpRequest, HttpResponse, HttpResponseHead, HttpVersion}
+import colossus.protocols.http.{HttpBody, HttpBodyEncoder, HttpBodyEncoders, HttpCodes, HttpHeader, HttpHeaders, HttpRequest, HttpResponse, HttpResponseHead, HttpVersion}
 import colossus.service.{Callback, ServiceConfig}
+import com.webtrends.harness.component.colossus.http.Encoders
 import com.webtrends.harness.component.colossus.{ExternalColossusRouteContainer, InternalColossusRouteContainer}
 import org.json4s.Formats
 import org.json4s.jackson.Serialization
@@ -14,22 +16,10 @@ import scala.concurrent.ExecutionContextExecutor
 class HttpRequestHandler(context: ServerContext,
                          config: ServiceConfig,
                          internal: Boolean)(implicit execution: ExecutionContextExecutor = Implicits.global)
-  extends RequestHandler(context, config) {
+  extends RequestHandler(context, config) with Encoders {
   import HttpBody._
   val serialization = Serialization
   val container = if (internal) InternalColossusRouteContainer else ExternalColossusRouteContainer
-
-  implicit object AnyRefEncoder extends HttpBodyEncoder[AnyRef] {
-    import org.json4s.jackson.Serialization.write
-    import org.json4s.{DefaultFormats, Formats}
-
-    implicit val formats: Formats = DefaultFormats
-
-    override def encode(data: AnyRef): HttpBody = data match {
-      case s: String => HttpBody(write(data))
-      case x => HttpBody(data)
-    }
-  }
 
   // Main routing workhorse, goes through all routes we've currently registered
   override protected def handle: PartialFunction[HttpRequest, Callback[HttpResponse]] = {
@@ -48,6 +38,7 @@ class HttpRequestHandler(context: ServerContext,
   // All marshalling takes place here, using the Formats found on the response (or DefaultFormats)
   def marshall(body: AnyRef, fmt: Formats, responseType: String): HttpBody = {
     body match {
+      case t: Throwable => HttpBody(t, responseType)
       case hb: HttpBody => hb
       case _ =>
         responseType.split(";")(0).trim match {

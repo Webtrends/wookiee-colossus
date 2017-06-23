@@ -29,5 +29,16 @@ class CommandRoutingTest extends MockColossusService {
       resp.body.toString() mustEqual "getRespValue"
       resp.code mustEqual HttpCodes.OK
     }
+
+    "encode failures correctly" in {
+      val resp = returnResponse(HttpRequest.get("/failure"))
+      resp.code mustEqual HttpCodes.BAD_REQUEST
+      resp.body.toString() mustEqual "some exception"
+    }
+
+    "bad response set as expected" in {
+      val bad = ColossusResponse.badRequest(None)
+      bad.code mustEqual HttpCodes.BAD_REQUEST
+    }
   }
 }
