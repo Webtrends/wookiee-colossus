@@ -2,14 +2,19 @@ package com.webtrends.harness.component.colossus
 
 import akka.testkit.TestProbe
 import colossus.protocols.http.{HttpCodes, HttpMethod, HttpRequest}
+import com.typesafe.config.ConfigFactory
+import com.webtrends.harness.component.colossus.command.TestCommandBoth
 import com.webtrends.harness.component.colossus.mock.MockColossusService
 import com.webtrends.harness.health.{ComponentState, HealthComponent}
 import com.webtrends.harness.service.messages.CheckHealth
+import com.webtrends.harness.service.test.TestHarness
+import org.scalatest.DoNotDiscover
 
 import scala.concurrent.duration.FiniteDuration
 
+@DoNotDiscover
 class ColossusManagerTest extends MockColossusService {
-  def commands = List()
+  def commands = List(("TestCommandBothInt", classOf[TestCommandBoth], List("Input")))
   def wookieeService = None
 
   "ColossusManager" should {
@@ -34,6 +39,24 @@ class ColossusManagerTest extends MockColossusService {
 
     "use head creator" in {
       getHead("/url").method mustEqual HttpMethod.Get
+    }
+
+    "be able to hit a BOTH command" in {
+      val resp = returnResponse(HttpRequest.get("/goober"))
+      resp.code mustEqual HttpCodes.OK
+      resp.body.toString() mustEqual "{\"response\":\"someResponseInput\"}"
+    }
+
+    "IO init with metrics enabled" in {
+      val conf = ConfigFactory.parseString(
+        """
+          |metric {
+          | name = "test"
+          | host = "host"
+          | port = 4545
+          |}
+        """.stripMargin)
+      ColossusManager.getIOSystem("IOTest", conf, metricsEnabled = true)
     }
   }
 

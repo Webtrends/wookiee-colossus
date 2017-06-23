@@ -1,6 +1,6 @@
 package com.webtrends.harness.component.colossus.mock
 
-import colossus.protocols.http.{HttpCode, HttpHeaders, HttpMethod, HttpRequest, HttpRequestHead, HttpResponse, HttpVersion}
+import colossus.protocols.http.{HttpHeaders, HttpMethod, HttpRequest, HttpRequestHead, HttpResponse, HttpVersion}
 import colossus.testkit.HttpServiceSpec
 import com.typesafe.config.ConfigFactory
 import com.webtrends.harness.component.colossus.ColossusManager

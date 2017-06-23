@@ -45,6 +45,24 @@ class CORSTest extends ColossusSpec(ActorSystem("CORSTest"))
       res.headers.toSeq must contain(HttpHeader("Access-Control-Allow-Credentials", "true"))
     }
 
+    "use option if allowedMethods empty" in {
+      val cb = Callback.fromFuture(cors(Settings(), {
+        case req@Post on Root / "test" => Future.successful(ColossusResponse("should not respond to pre-flight requests"))
+      })(
+        HttpRequest(Options, "/test", HttpBody.NoBody)
+          .withHeader(HttpHeader("Origin", "www.example.com"))
+          .withHeader(HttpHeader("Access-Control-Request-Method", "POST"))
+      ))
+
+      val res = CallbackAwait.result(cb, 1.second)
+
+      res.code mustEqual HttpCodes.OK
+      res.body mustEqual HttpBody.NoBody
+      res.headers.toSeq must contain(HttpHeader("Access-Control-Allow-Origin", "www.example.com"))
+      res.headers.toSeq must contain(HttpHeader("Access-Control-Allow-Methods", "OPTIONS"))
+      res.headers.toSeq must contain(HttpHeader("Access-Control-Allow-Credentials", "true"))
+    }
+
     "handle Access-Control-Request-Headers in pre-flight requests" in {
 
       val cb = Callback.fromFuture(cors(Settings(

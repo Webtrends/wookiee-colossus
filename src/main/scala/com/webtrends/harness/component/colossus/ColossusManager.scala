@@ -13,8 +13,10 @@ import colossus.metrics.{MetricReporterConfig, MetricSystem, OpenTsdbSender}
 import colossus.protocols.http.HttpHeaders
 import colossus.protocols.http.server.{HttpServer, Initializer, RequestHandler}
 import colossus.service.ServiceConfig
+import com.typesafe.config.Config
 import com.webtrends.harness.command.{Command, CommandHelper}
 import com.webtrends.harness.component.Component
+import com.webtrends.harness.component.colossus.ColossusManager._
 import com.webtrends.harness.component.colossus.command.CoreColossusCommand
 import com.webtrends.harness.component.colossus.handle.HttpRequestHandler
 import com.webtrends.harness.health.{ComponentState, HealthComponent}
@@ -44,54 +46,34 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
 
   override def start = {
     init()
+    addCommand(CoreColossusCommand.CommandName, classOf[CoreColossusCommand])
     super.start
   }
 
+  def init(): Unit = {
+    val colConfig = config.getConfig(ComponentName)
+    val serviceName = colConfig.getString("service-name")
+    val metricsEnabled = Try(colConfig.getBoolean("metric.enabled")).getOrElse(false)
+    val serverConfig = colConfig.getConfig("server")
+
+    val internalServerSettings =
+      ServerSettings.extract(serverConfig.withFallback(colConfig.getConfig("internal-server")))
+    val externalServerSettings =
+      ServerSettings.extract(serverConfig.withFallback(colConfig.getConfig("external-server")))
+    val serviceConfig = ServiceConfig.load(colConfig.getConfig("service.default"))
+
+    implicit val io: IOSystem = getIOSystem(serviceName, colConfig, metricsEnabled)
+
+    internalServerRef = Some(HttpServer.start(serviceName + "_internal",
+      internalServerSettings)(serverInit(serviceConfig, internal = true)))
+    externalServerRef = Some(HttpServer.start(serviceName + "_external",
+      externalServerSettings)(serverInit(serviceConfig, internal = false)))
+  }
 
   override def stop = {
     ColossusManager.internalServerRef.foreach(_.die())
     ColossusManager.externalServerRef.foreach(_.die())
     super.stop
-  }
-
-  def init(): Unit = {
-    try {
-      val colConfig = config.getConfig(ColossusManager.ComponentName)
-      val serviceName = colConfig.getString("service-name")
-      val metricsEnabled = Try(colConfig.getBoolean("metric.enabled")).getOrElse(false)
-      val metricsName = Try(colConfig.getString("metric.name")).getOrElse(serviceName)
-      val metricsHost = Try(colConfig.getString("metric.host"))
-        .getOrElse(if (metricsEnabled) throw new Exception("Must set metric.host if using metrics") else "")
-      val metricsPort = Try(colConfig.getInt("metric.port")).getOrElse(4242)
-      val serverConfig = colConfig.getConfig("server")
-
-      val internalServerSettings =
-        ServerSettings.extract(serverConfig.withFallback(colConfig.getConfig("internal-server")))
-      val externalServerSettings =
-        ServerSettings.extract(serverConfig.withFallback(colConfig.getConfig("external-server")))
-      val serviceConfig = ServiceConfig.load(colConfig.getConfig("service.default"))
-
-      implicit val io: IOSystem = if (metricsEnabled) {
-        val colossusMetricSystem = MetricSystem(metricsName)
-        val colossusMetricReporterConfig = MetricReporterConfig(Seq(OpenTsdbSender(
-          metricsHost, metricsPort
-        )))
-        colossusMetricSystem.collectionIntervals.get(1.minute).foreach(_.report(colossusMetricReporterConfig))
-        IOSystem(metricsName, config, Some(colossusMetricSystem))
-      } else {
-        IOSystem()
-      }
-
-      ColossusManager.internalServerRef = Some(HttpServer.start(serviceName + "_internal",
-        internalServerSettings)(serverInit(serviceConfig, internal = true)))
-      ColossusManager.externalServerRef = Some(HttpServer.start(serviceName + "_external",
-        externalServerSettings)(serverInit(serviceConfig, internal = false)))
-      addCommand(CoreColossusCommand.CommandName, classOf[CoreColossusCommand])
-    } catch {
-      case ex: Throwable =>
-        log.error(ex, "Error starting up wookiee-colossus")
-        throw ex
-    }
   }
 
   override def getHealth: Future[HealthComponent] = {
@@ -102,7 +84,7 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
       case Success(succ) =>
         p success HealthComponent(self.path.toString, details = "Colossus Component Up", components = succ)
       case Failure(f) =>
-        p success HealthComponent(self.path.toString, ComponentState.CRITICAL, s"Could not get health of servers: ${f.getMessage}")
+        p success HealthComponent(self.path.toString, ComponentState.CRITICAL, "Could not get health of servers")
     }
     p.future
   }
@@ -127,6 +109,30 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
           )
       }
   }
+}
+
+object ColossusManager {
+  val ComponentName = "wookiee-colossus"
+  protected[colossus] var internalServerRef: Option[ServerRef] = None
+  protected[colossus] var externalServerRef: Option[ServerRef] = None
+
+  def getInternalServer = internalServerRef.get
+  def getExternalServer = externalServerRef.get
+
+  def getIOSystem(serviceName: String, config: Config,
+                          metricsEnabled: Boolean)(implicit system: ActorSystem): IOSystem = {
+    if (metricsEnabled) {
+      val metricsName = Try(config.getString("metric.name")).getOrElse(serviceName)
+      val metricsHost = config.getString("metric.host")
+      val metricsPort = config.getInt("metric.port")
+      val colossusMetricSystem = MetricSystem(metricsName)
+      val colossusMetricReporterConfig = MetricReporterConfig(Seq(OpenTsdbSender(
+        metricsHost, metricsPort
+      )))
+      colossusMetricSystem.collectionIntervals.get(1.minute).foreach(_.report(colossusMetricReporterConfig))
+      IOSystem(metricsName, config, Some(colossusMetricSystem))
+    } else IOSystem()
+  }
 
   private def serverInit(serviceConfig: ServiceConfig, internal: Boolean): InitContext => Initializer = { init =>
     new Initializer(init) {
@@ -136,15 +142,4 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
       )
     }
   }
-}
-
-object ColossusManager {
-  val ComponentName = "wookiee-colossus"
-  protected[colossus] var internalServerRef: Option[ServerRef] = None
-  protected[colossus] var externalServerRef: Option[ServerRef] = None
-
-  def getInternalServer =
-    internalServerRef.getOrElse(throw new IllegalStateException("Internal Colossus server not initialized"))
-  def getExternalServer =
-    externalServerRef.getOrElse(throw new IllegalStateException("External Colossus server not initialized"))
 }

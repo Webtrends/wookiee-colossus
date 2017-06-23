@@ -1,7 +1,7 @@
 package com.webtrends.harness.component.colossus.command
 
 import colossus.protocols.http.HttpRequest
-import colossus.service.{Callback, CallbackExecutor}
+import colossus.service.CallbackExecutor
 import com.webtrends.harness.command.{Command, CommandBean}
 import com.webtrends.harness.component.colossus.{ExternalColossusRouteContainer, InternalColossusRouteContainer}
 
@@ -23,11 +23,6 @@ trait ColossusCommand extends Command {
   def matchedRoutes: PartialFunction[HttpRequest, Future[ColossusResponse]]
   // Post processing after any route done for this class
   def postProcessing(resp: ColossusResponse): ColossusResponse = resp
-
-  // Convenience method to get matchedRoutes result as a Callback
-  def callbackResponse(req: HttpRequest): Callback[ColossusResponse] = {
-    Callback.fromFuture(matchedRoutes(req))
-  }
 
   def addRoutes(): Unit = {
     routeExposure match {

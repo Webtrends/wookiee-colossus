@@ -2,10 +2,12 @@ package com.webtrends.harness.component.colossus.command
 
 import colossus.protocols.http.{HttpBody, HttpCodes, HttpRequest}
 import com.webtrends.harness.component.colossus.mock.MockColossusService
+import org.scalatest.DoNotDiscover
 
+@DoNotDiscover
 class CommandRoutingTest extends MockColossusService {
   def commands = List(("TestCommand", classOf[TestCommand], List()),
-    ("TestCommandBoth", classOf[TestCommandBoth], List()))
+    ("TestCommandBoth", classOf[TestCommandBoth], List("Input")))
   def wookieeService = None
 
   "Command routing" should {
@@ -50,6 +52,7 @@ class CommandRoutingTest extends MockColossusService {
     "be able to hit a BOTH command" in {
       val resp = returnResponse(HttpRequest.get("/goober"))
       resp.code mustEqual HttpCodes.OK
+      resp.body.toString() mustEqual "{\"response\":\"someResponseInput\"}"
     }
 
     "go through the anyref encoder" in {
@@ -65,6 +68,11 @@ class CommandRoutingTest extends MockColossusService {
     "get empty body" in {
       val resp = returnResponse(HttpRequest.get("/empty"))
       resp.body mustEqual HttpBody.NoBody
+    }
+
+    "return on total failure" in {
+      val resp = returnResponse(HttpRequest.get("/notimpl"))
+      resp.code mustEqual HttpCodes.INTERNAL_SERVER_ERROR
     }
   }
 }

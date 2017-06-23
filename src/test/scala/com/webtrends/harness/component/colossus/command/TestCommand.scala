@@ -29,10 +29,12 @@ class TestCommand extends Command with ColossusCommand {
       Future.successful(ColossusResponse("<>", HttpCodes.OK, "text/xml"))
     case req @ Get on Root / "empty" =>
       Future.successful(ColossusResponse("", HttpCodes.OK))
+    case req @ Get on Root / "notimpl" =>
+      Future { execute(None) }
   }
 }
 
-class TestCommandBoth extends Command with ColossusCommand with Encoders {
+class TestCommandBoth(input: String) extends Command with ColossusCommand with Encoders {
   override def commandName = "TestCommandBoth"
   override def routeExposure = RouteExposure.BOTH
 
@@ -42,7 +44,7 @@ class TestCommandBoth extends Command with ColossusCommand with Encoders {
 
   override def matchedRoutes = {
     case req @ Get on Root / "goober" =>
-      Future.successful(ColossusResponse(TestResponse("someResponse"), HttpCodes.OK))
+      Future.successful(ColossusResponse(TestResponse("someResponse" + input), HttpCodes.OK))
     case req @ Get on Root / "anyref" =>
       Future.successful(ColossusResponse(HttpBody(new TestRef), HttpCodes.OK))
   }
