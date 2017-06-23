@@ -1,8 +1,6 @@
 package com.webtrends.harness.component.colossus.command
 
-import java.net.InetAddress
-
-import colossus.protocols.http.{HttpCodes, HttpHeader, HttpRequest}
+import colossus.protocols.http.{HttpBody, HttpCodes, HttpRequest}
 import com.webtrends.harness.component.colossus.mock.MockColossusService
 
 class CommandRoutingTest extends MockColossusService {
@@ -57,6 +55,16 @@ class CommandRoutingTest extends MockColossusService {
     "go through the anyref encoder" in {
       val resp = returnResponse(HttpRequest.get("/anyref"))
       resp.body.toString() mustEqual "anyref"
+    }
+
+    "get xml output" in {
+      val resp = returnResponse(HttpRequest.get("/xml"))
+      resp.body.toString() mustEqual "<>"
+    }
+
+    "get empty body" in {
+      val resp = returnResponse(HttpRequest.get("/empty"))
+      resp.body mustEqual HttpBody.NoBody
     }
   }
 }

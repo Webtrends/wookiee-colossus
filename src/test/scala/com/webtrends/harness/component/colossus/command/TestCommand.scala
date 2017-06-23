@@ -25,6 +25,10 @@ class TestCommand extends Command with ColossusCommand {
       Future.successful(ColossusResponse(TestResponse("someResponse"), HttpCodes.OK))
     case req @ Get on Root / "failure" =>
       Future.successful(ColossusResponse(new Exception("some exception"), HttpCodes.BAD_REQUEST, "text/plain"))
+    case req @ Get on Root / "xml" =>
+      Future.successful(ColossusResponse("<>", HttpCodes.OK, "text/xml"))
+    case req @ Get on Root / "empty" =>
+      Future.successful(ColossusResponse("", HttpCodes.OK))
   }
 }
 
