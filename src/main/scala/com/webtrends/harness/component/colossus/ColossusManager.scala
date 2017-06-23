@@ -77,37 +77,16 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
   }
 
   override def getHealth: Future[HealthComponent] = {
-    val intHealth = ColossusManager.internalServerRef.map(serverHealth).getOrElse(notStartedHealth)
-    val extHealth = ColossusManager.externalServerRef.map(serverHealth).getOrElse(notStartedHealth)
+    val intHealth = serverHealth(ColossusManager.internalServerRef)
+    val extHealth = serverHealth(ColossusManager.externalServerRef)
     val p = Promise[HealthComponent]()
     Future.sequence(List(intHealth, extHealth)) onComplete {
       case Success(succ) =>
-        p success HealthComponent(self.path.toString, details = "Colossus Component Up", components = succ)
+        p success HealthComponent(ComponentName, details = "Colossus Component Up", components = succ)
       case Failure(f) =>
-        p success HealthComponent(self.path.toString, ComponentState.CRITICAL, "Could not get health of servers")
+        p success HealthComponent(ComponentName, ComponentState.CRITICAL, "Could not get health of servers")
     }
     p.future
-  }
-
-  private val notStartedHealth = Future.successful(
-    HealthComponent(self.path.toString, ComponentState.CRITICAL, "could not find colossus server"))
-  private def serverHealth: ServerRef => Future[HealthComponent] = { serverRef =>
-    serverRef
-      .info()
-      .map {
-        case ServerInfo(openConnections, Bound) =>
-          HealthComponent(
-            serverRef.name.idString,
-            ComponentState.NORMAL,
-            s"colossus server: ServerInfo(openConnections=$openConnections, status=$Bound)"
-          )
-        case info =>
-          HealthComponent(
-            serverRef.name.idString,
-            ComponentState.CRITICAL,
-            s"colossus server: ServerInfo(openConnections=${info.openConnections}, status=${info.status})"
-          )
-      }
   }
 }
 
@@ -133,6 +112,28 @@ object ColossusManager {
       IOSystem(metricsName, config, Some(colossusMetricSystem))
     } else IOSystem()
   }
+
+  def serverHealth(serverRef: Option[ServerRef])(implicit ec: ExecutionContextExecutor): Future[HealthComponent] = serverRef match {
+    case Some(ref) => ref.info()
+      .map {
+        case ServerInfo(openConnections, Bound) =>
+          HealthComponent(
+            ref.name.idString,
+            ComponentState.NORMAL,
+            s"colossus server: ServerInfo(openConnections=$openConnections, status=$Bound)"
+          )
+        case info =>
+          HealthComponent(
+            ref.name.idString,
+            ComponentState.CRITICAL,
+            s"colossus server: ServerInfo(openConnections=${info.openConnections}, status=${info.status})"
+          )
+      }
+    case None => notStartedHealth
+  }
+
+  private val notStartedHealth = Future.successful(
+    HealthComponent(ComponentName, ComponentState.CRITICAL, "could not find colossus server"))
 
   private def serverInit(serviceConfig: ServiceConfig, internal: Boolean): InitContext => Initializer = { init =>
     new Initializer(init) {
