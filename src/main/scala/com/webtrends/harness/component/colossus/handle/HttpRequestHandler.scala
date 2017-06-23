@@ -1,9 +1,8 @@
 package com.webtrends.harness.component.colossus.handle
 
-import akka.util.ByteString
-import colossus.core.ServerContext
+import colossus.core.{AliveState, ServerContext}
 import colossus.protocols.http.server.RequestHandler
-import colossus.protocols.http.{HttpBody, HttpBodyEncoder, HttpBodyEncoders, HttpCodes, HttpHeader, HttpHeaders, HttpRequest, HttpResponse, HttpResponseHead, HttpVersion}
+import colossus.protocols.http.{HttpBody, HttpCodes, HttpHeader, HttpHeaders, HttpRequest, HttpResponse, HttpResponseHead, HttpVersion}
 import colossus.service.{Callback, ServiceConfig}
 import com.webtrends.harness.component.colossus.http.Encoders
 import com.webtrends.harness.component.colossus.{ExternalColossusRouteContainer, InternalColossusRouteContainer}
@@ -23,7 +22,7 @@ class HttpRequestHandler(context: ServerContext,
 
   // Main routing workhorse, goes through all routes we've currently registered
   override protected def handle: PartialFunction[HttpRequest, Callback[HttpResponse]] = {
-    container.getRouteFunction.andThen[Callback[HttpResponse]]({ colResp =>
+    addRemoteHost.andThen(container.getRouteFunction.andThen[Callback[HttpResponse]]({ colResp =>
       Callback.fromFuture(colResp map { resp =>
         HttpResponse(HttpResponseHead(HttpVersion.`1.1`,
           resp.code, resp.headers + HttpHeader("Content-Type", resp.responseType)),
@@ -32,7 +31,7 @@ class HttpRequestHandler(context: ServerContext,
     }).orElse[HttpRequest, Callback[HttpResponse]] { case req: HttpRequest =>
       Callback.successful(HttpResponse(HttpResponseHead(HttpVersion.`1.1`,
         HttpCodes.NOT_FOUND, HttpHeaders.Empty), s"This endpoint, ${req.head.path}, was not found."))
-    }
+    })
   }
 
   // All marshalling takes place here, using the Formats found on the response (or DefaultFormats)
@@ -52,5 +51,17 @@ class HttpRequestHandler(context: ServerContext,
           }
         }
     }
+  }
+
+  def addRemoteHost: PartialFunction[HttpRequest, HttpRequest] = {
+    case req =>
+      connection.connectionState match {
+        case state: AliveState => state
+          .endpoint
+          .remoteAddress
+          .map(_.getHostString)
+          .map(hostString => req.withHeader("Remote-Address", hostString)).getOrElse(req)
+        case _ => req
+      }
   }
 }

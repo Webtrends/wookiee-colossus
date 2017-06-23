@@ -46,12 +46,17 @@ class CommandRoutingTest extends MockColossusService {
 
     "put remote address on the response" in {
       val resp = returnResponse(HttpRequest.get("/goober/Value"))
-      resp.head.headers.toSeq must contain(HttpHeader("Remote-Address", InetAddress.getLocalHost.getHostAddress))
+      resp.head.headers.toSeq.exists(_.key.toLowerCase == "remote-address") mustEqual true
     }
 
     "be able to hit a BOTH command" in {
       val resp = returnResponse(HttpRequest.get("/goober"))
       resp.code mustEqual HttpCodes.OK
+    }
+
+    "go through the anyref encoder" in {
+      val resp = returnResponse(HttpRequest.get("/anyref"))
+      resp.body.toString() mustEqual "anyref"
     }
   }
 }

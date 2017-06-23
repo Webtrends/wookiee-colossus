@@ -1,7 +1,7 @@
 package com.webtrends.harness.component.colossus
 
 import akka.testkit.TestProbe
-import colossus.protocols.http.{HttpCodes, HttpRequest}
+import colossus.protocols.http.{HttpCodes, HttpMethod, HttpRequest}
 import com.webtrends.harness.component.colossus.mock.MockColossusService
 import com.webtrends.harness.health.{ComponentState, HealthComponent}
 import com.webtrends.harness.service.messages.CheckHealth
@@ -30,6 +30,10 @@ class ColossusManagerTest extends MockColossusService {
 
     "handle not found case" in {
       expectCode(HttpRequest.get("/nonexistent"), HttpCodes.NOT_FOUND)
+    }
+
+    "use head creator" in {
+      getHead("/url").method mustEqual HttpMethod.Get
     }
   }
 
