@@ -1,17 +1,22 @@
 package com.webtrends.harness.component.colossus
 
+import akka.testkit.TestProbe
+import colossus.protocols.http.{HttpCodes, HttpMethod, HttpRequest}
+import com.typesafe.config.ConfigFactory
+import com.webtrends.harness.component.colossus.command.TestCommandBoth
+import com.webtrends.harness.component.colossus.mock.MockColossusService
 import com.webtrends.harness.health.{ComponentState, HealthComponent}
 import com.webtrends.harness.service.messages.CheckHealth
-import com.webtrends.harness.service.test.TestHarness
-import com.webtrends.harness.service.test.config.TestConfig
-import org.scalatest.MustMatchers
-import akka.testkit.TestProbe
-import org.scalatest._
+import org.scalatest.DoNotDiscover
 
-class ColossusManagerTest extends WordSpec with MustMatchers {
-  val sys = TestHarness(ColossusManagerTest.config, None, Some(Map("wookiee-colossus" -> classOf[ColossusManager])))
-  implicit val system = TestHarness.system.get
-  val colManager = sys.getComponent("wookiee-colossus").get
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.FiniteDuration
+import scala.util.Success
+
+@DoNotDiscover
+class ColossusManagerTest extends MockColossusService {
+  def commands = List(("TestCommandBothInt", classOf[TestCommandBoth], List("Input")))
+  def wookieeService = None
 
   "ColossusManager" should {
     "be ready" in {
@@ -24,28 +29,45 @@ class ColossusManagerTest extends WordSpec with MustMatchers {
           false mustEqual true
       }
     }
-  }
-}
 
-object ColossusManagerTest {
-  val config = TestConfig.conf(
-    """
-      |wookiee-colossus {
-      |  // For healthcheck, metric, lb and other endpoints
-      |  internal-server {
-      |    enabled = true
-      |    interface = 0.0.0.0
-      |    http-port = 8080
-      |  }
-      |
-      |  external-server {
-      |    interface = 0.0.0.0
-      |    http-port = 8082
-      |  }
-      |
-      |  manager = "com.webtrends.harness.component.colossus.ColossusManager"
-      |  enabled = true
-      |  dynamic-component = true
-      |}
-    """.stripMargin)
+    "handle health check request" in {
+      expectCode(HttpRequest.get("/healthcheck"), HttpCodes.OK)
+    }
+
+    "handle not found case" in {
+      expectCode(HttpRequest.get("/nonexistent"), HttpCodes.NOT_FOUND)
+    }
+
+    "use head creator" in {
+      getHead("/url").method mustEqual HttpMethod.Get
+    }
+
+    "be able to hit a BOTH command" in {
+      val resp = returnResponse(HttpRequest.get("/goober"))
+      resp.code mustEqual HttpCodes.OK
+      resp.body.toString() mustEqual "{\"response\":\"someResponseInput\"}"
+    }
+
+    "IO init with metrics enabled" in {
+      val conf = ConfigFactory.parseString(
+        """
+          |metric {
+          | name = "test"
+          | host = "host"
+          | port = 4545
+          |}
+        """.stripMargin)
+      ColossusManager.getIOSystem("IOTest", conf, metricsEnabled = true)
+    }
+
+    "get not started health if server not up" in {
+      ColossusManager.serverHealth(None) onComplete {
+        case Success(hc) =>
+          hc.state.equals(ComponentState.CRITICAL) mustEqual true
+      }
+    }
+  }
+
+  override def service = ColossusManager.getInternalServer
+  override def requestTimeout = FiniteDuration(10000, "ms")
 }
