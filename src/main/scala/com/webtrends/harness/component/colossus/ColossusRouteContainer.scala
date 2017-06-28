@@ -18,10 +18,12 @@ trait ColossusRouteContainer {
 
   // Call this to add your route handler to the list of handlers
   def addRoute(commandName: String, route: PartialFunction[HttpRequest, Future[ColossusResponse]]) = {
-    routes.put(commandName, route)
-    routeFunction = if (routes.size == 1) {
-      routes.values.head
-    } else routes.values.tail.foldLeft(routes.values.head)((a, b) => a.orElse(b))
+    if (!routes.contains(commandName)) {
+      routes.put(commandName, route)
+      routeFunction = if (routes.size == 1) {
+        routes.values.head
+      } else routes.values.tail.foldLeft(routes.values.head)((a, b) => a.orElse(b))
+    }
   }
 
   // Returns the route function we use to evaluate requests
