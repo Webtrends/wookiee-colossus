@@ -42,10 +42,7 @@ trait MockColossusService extends HttpServiceSpec {
     HttpRequestHead(method, url, HttpVersion.`1.1`, headers)
   }
 
-  override protected def beforeAll() = {
-    super.beforeAll()
-    commands.foreach { c =>
-      if (c._3.nonEmpty) colManager ! c else colManager ! (c._1, c._2)
-    }
+  commands.foreach { c =>
+    if (c._3.nonEmpty) colManager ! c else colManager ! (c._1, c._2)
   }
 }
