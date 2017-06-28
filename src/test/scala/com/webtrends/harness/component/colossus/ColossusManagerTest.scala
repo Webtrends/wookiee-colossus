@@ -15,7 +15,7 @@ import scala.util.Success
 
 @DoNotDiscover
 class ColossusManagerTest extends MockColossusService {
-  def commands = List(("TestCommandBothInt", classOf[TestCommandBoth], List("Input")))
+  def commands = List(("TestCommandBoth", classOf[TestCommandBoth], List("Input")))
   def wookieeService = None
 
   "ColossusManager" should {
