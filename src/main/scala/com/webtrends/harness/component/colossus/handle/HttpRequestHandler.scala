@@ -47,6 +47,7 @@ class HttpRequestHandler(context: ServerContext,
             HttpBody(body.toString, responseType)
           case _ => body match {
             case s: String if s.isEmpty => HttpBody.NoBody
+            case s: String => HttpBody(s, responseType)
             case _ => HttpBody(serialization.write(body)(fmt), responseType)
           }
         }

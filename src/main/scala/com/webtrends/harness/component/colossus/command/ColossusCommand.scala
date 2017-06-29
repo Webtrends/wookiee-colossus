@@ -21,18 +21,16 @@ trait ColossusCommand extends Command {
   def routeExposure: RouteExposure
   // A partial function filled with cases matching endpoints
   def matchedRoutes: PartialFunction[HttpRequest, Future[ColossusResponse]]
-  // Post processing after any route done for this class
-  def postProcessing(resp: ColossusResponse): ColossusResponse = resp
 
   def addRoutes(): Unit = {
     routeExposure match {
       case INTERNAL =>
-        InternalColossusRouteContainer.addRoute(commandName, matchedRoutes.andThen(res => res.map(postProcessing)))
+        InternalColossusRouteContainer.addRoute(commandName, matchedRoutes)
       case EXTERNAL =>
-        ExternalColossusRouteContainer.addRoute(commandName, matchedRoutes.andThen(res => res.map(postProcessing)))
+        ExternalColossusRouteContainer.addRoute(commandName, matchedRoutes)
       case BOTH =>
-        ExternalColossusRouteContainer.addRoute(commandName, matchedRoutes.andThen(res => res.map(postProcessing)))
-        InternalColossusRouteContainer.addRoute(commandName, matchedRoutes.andThen(res => res.map(postProcessing)))
+        ExternalColossusRouteContainer.addRoute(commandName, matchedRoutes)
+        InternalColossusRouteContainer.addRoute(commandName, matchedRoutes)
     }
   }
 

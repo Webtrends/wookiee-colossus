@@ -11,10 +11,6 @@ class CommandRoutingTest extends MockColossusService {
   def wookieeService = None
 
   "Command routing" should {
-    "handle a get request" in {
-      expectCodeAndBody(HttpRequest.get("/goober/Value"), HttpCodes.OK, "getRespValue")
-    }
-
     "handle a put request" in {
       expectCodeAndBody(HttpRequest.put("/goober"), HttpCodes.OK, """{"response":"someResponse"}""")
     }

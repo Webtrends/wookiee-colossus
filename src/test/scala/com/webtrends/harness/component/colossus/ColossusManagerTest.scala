@@ -15,7 +15,7 @@ import scala.util.Success
 
 @DoNotDiscover
 class ColossusManagerTest extends MockColossusService {
-  def commands = List(("TestCommandBothInt", classOf[TestCommandBoth], List("Input")))
+  def commands = List(("TestCommandBoth", classOf[TestCommandBoth], List("Input")))
   def wookieeService = None
 
   "ColossusManager" should {
@@ -32,6 +32,26 @@ class ColossusManagerTest extends MockColossusService {
 
     "handle health check request" in {
       expectCode(HttpRequest.get("/healthcheck"), HttpCodes.OK)
+    }
+
+    "handle health check request full" in {
+      expectCode(HttpRequest.get("/healthcheck/full"), HttpCodes.OK)
+    }
+
+    "handle health check request lb" in {
+      expectCode(HttpRequest.get("/healthcheck/lb"), HttpCodes.OK)
+    }
+
+    "handle health check request nagios" in {
+      expectCode(HttpRequest.get("/healthcheck/nagios"), HttpCodes.OK)
+    }
+
+    "handle ping" in {
+      expectCode(HttpRequest.get("/ping"), HttpCodes.OK)
+    }
+
+    "handle metrics (internal fail as we don't depend on it)" in {
+      expectCode(HttpRequest.get("/metrics"), HttpCodes.INTERNAL_SERVER_ERROR)
     }
 
     "handle not found case" in {
