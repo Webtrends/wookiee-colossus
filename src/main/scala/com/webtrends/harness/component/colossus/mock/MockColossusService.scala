@@ -9,6 +9,7 @@ import com.webtrends.harness.service.Service
 import com.webtrends.harness.service.test.TestHarness
 import com.webtrends.harness.service.test.config.TestConfig
 
+import scala.collection.mutable
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
 
@@ -25,6 +26,9 @@ trait MockColossusService extends HttpServiceSpec {
 
   // Service to start up, or None if we don't want to start one
   def wookieeService: Option[Map[String, Class[_ <: Service]]]
+
+  // Automatically exclude commands with the same name as others in the suite from being recreated
+  def noDuplicates: Boolean = true
 
   // Override this is trying to hit internal endpoints
   override def service = ColossusManager.getExternalServer
@@ -43,6 +47,15 @@ trait MockColossusService extends HttpServiceSpec {
   }
 
   commands.foreach { c =>
-    if (c._3.nonEmpty) colManager ! c else colManager ! (c._1, c._2)
+    MockColossusService.createdCommands synchronized {
+      if (!noDuplicates || !MockColossusService.createdCommands.contains(c._1)) {
+        MockColossusService.createdCommands += c._1
+        if (c._3.nonEmpty) colManager ! c else colManager ! (c._1, c._2)
+      }
+    }
   }
+}
+
+object MockColossusService {
+  val createdCommands = mutable.HashSet[String]()
 }

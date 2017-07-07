@@ -37,11 +37,11 @@ class CoreColossusCommand extends Command with ColossusCommand with ComponentHel
       }
     case req @ Get on Root / "healthcheck" / "lb" =>
       (healthActor ? HealthRequest(HealthResponseType.LB)).mapTo[String] map { ah =>
-        ColossusResponse(ah)
+        ColossusResponse('"' + ah + '"')
       }
     case req @ Get on Root / "healthcheck" / "nagios" =>
       (healthActor ? HealthRequest(HealthResponseType.NAGIOS)).mapTo[String] map { ah =>
-        ColossusResponse(ah)
+        ColossusResponse('"' + ah + '"')
       }
     case req @ Get on Root / "ping" =>
       Future.successful(ColossusResponse("pong: "

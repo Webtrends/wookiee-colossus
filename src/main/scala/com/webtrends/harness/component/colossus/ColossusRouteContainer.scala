@@ -2,6 +2,7 @@ package com.webtrends.harness.component.colossus
 
 import colossus.protocols.http.{HttpCodes, HttpRequest}
 import com.webtrends.harness.component.colossus.command.ColossusResponse
+import com.webtrends.harness.logging.Logger
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.Future
@@ -18,11 +19,14 @@ trait ColossusRouteContainer {
 
   // Call this to add your route handler to the list of handlers
   def addRoute(commandName: String, route: PartialFunction[HttpRequest, Future[ColossusResponse]]) = {
-    if (!routes.contains(commandName)) {
-      routes.put(commandName, route)
-      routeFunction = if (routes.size == 1) {
-        routes.values.head
-      } else routes.values.tail.foldLeft(routes.values.head)((a, b) => a.orElse(b))
+    routes synchronized {
+      if (!routes.contains(commandName)) {
+        Logger.getLogger(getClass).info(s"${getClass.getSimpleName} Creating route for command: $commandName")
+        routes.put(commandName, route)
+        routeFunction = if (routes.size == 1) {
+          routes.values.head
+        } else routes.values.tail.foldLeft(routes.values.head)((a, b) => a.orElse(b))
+      }
     }
   }
 
