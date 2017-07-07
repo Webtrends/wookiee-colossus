@@ -47,9 +47,11 @@ trait MockColossusService extends HttpServiceSpec {
   }
 
   commands.foreach { c =>
-    if (!noDuplicates || !MockColossusService.createdCommands.contains(c._1)) {
-      MockColossusService.createdCommands += c._1
-      if (c._3.nonEmpty) colManager ! c else colManager ! (c._1, c._2)
+    MockColossusService.createdCommands synchronized {
+      if (!noDuplicates || !MockColossusService.createdCommands.contains(c._1)) {
+        MockColossusService.createdCommands += c._1
+        if (c._3.nonEmpty) colManager ! c else colManager ! (c._1, c._2)
+      }
     }
   }
 }
