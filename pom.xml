@@ -186,7 +186,7 @@
                 <version>${scoverage.plugin.version}</version>
                 <configuration>
                     <highlighting>true</highlighting>
-                    <minimumCoverage>30</minimumCoverage>
+                    <!--minimumCoverage>30</minimumCoverage-->
                     <failOnMinimumCoverage>true</failOnMinimumCoverage>
                 </configuration>
                 <executions>

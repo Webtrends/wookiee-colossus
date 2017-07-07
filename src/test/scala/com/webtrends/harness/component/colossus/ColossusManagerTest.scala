@@ -63,7 +63,7 @@ class ColossusManagerTest extends MockColossusService {
     }
 
     "be able to hit a BOTH command" in {
-      val resp = returnResponse(HttpRequest.get("/goober"))
+      val resp = returnResponse(HttpRequest.get("/both"))
       resp.code mustEqual HttpCodes.OK
       resp.body.toString() mustEqual "{\"response\":\"someResponseInput\"}"
     }

@@ -13,9 +13,13 @@ class TestRef extends AnyRef {
   override def toString = "anyref"
 }
 
-class TestCommand extends Command with ColossusCommand {
+class TestCommand extends Command with ColossusCommand with Encoders {
   override def commandName = "TestCommand"
   override def routeExposure = RouteExposure.EXTERNAL
+
+  implicit object TestRefEncoder extends HttpBodyEncoder[TestRef] {
+    override def encode(data: TestRef): HttpBody = AnyRefEncoder.encode(data)
+  }
 
   override def matchedRoutes = {
     case req @ Get on Root / "goober" / key =>
@@ -31,21 +35,17 @@ class TestCommand extends Command with ColossusCommand {
       Future.successful(ColossusResponse("", HttpCodes.OK))
     case req @ Get on Root / "notimpl" =>
       Future { execute(None) }
+    case req @ Get on Root / "anyref" =>
+      Future.successful(ColossusResponse(HttpBody(new TestRef), HttpCodes.OK))
   }
 }
 
-class TestCommandBoth(input: String) extends Command with ColossusCommand with Encoders {
+class TestCommandBoth(input: String) extends Command with ColossusCommand {
   override def commandName = "TestCommandBoth"
   override def routeExposure = RouteExposure.BOTH
 
-  implicit object TestRefEncoder extends HttpBodyEncoder[TestRef] {
-    override def encode(data: TestRef): HttpBody = AnyRefEncoder.encode(data)
-  }
-
   override def matchedRoutes = {
-    case req @ Get on Root / "goober" =>
+    case req @ Get on Root / "both" =>
       Future.successful(ColossusResponse(TestResponse("someResponse" + input), HttpCodes.OK))
-    case req @ Get on Root / "anyref" =>
-      Future.successful(ColossusResponse(HttpBody(new TestRef), HttpCodes.OK))
   }
 }
