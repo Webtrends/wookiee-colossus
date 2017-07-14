@@ -28,6 +28,40 @@
     <packaging>jar</packaging>
     <name>wookiee-colossus</name>
 
+    <!-- List the core committers -->
+    <developers>
+        <developer>
+            <id>wteng</id>
+            <name>Webtrends Engineering</name>
+            <email>info@webtrends.com</email>
+            <organization>webtrends</organization>
+            <organizationUrl>http://webtrends.com</organizationUrl>
+            <roles>
+                <role>developer</role>
+            </roles>
+            <timezone>-8</timezone>
+        </developer>
+    </developers>
+
+    <url>http://webtrends.github.io/wookiee-colossus</url>
+    <organization>
+        <name>webtrends</name>
+        <url>http://webtrends.com</url>
+    </organization>
+
+    <issueManagement>
+        <system>Github</system>
+        <url>https://github.com/Webtrends/wookiee-colossus/issues</url>
+    </issueManagement>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+            <comments>A business-friendly OSS license</comments>
+        </license>
+    </licenses>
 
     <repositories>
         <repository>
