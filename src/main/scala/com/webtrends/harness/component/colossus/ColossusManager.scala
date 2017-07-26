@@ -55,19 +55,21 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
     val serviceName = colConfig.getString("service-name")
     val metricsEnabled = Try(colConfig.getBoolean("metric.enabled")).getOrElse(false)
     val serverConfig = colConfig.getConfig("server")
+    val intServerConfig = colConfig.getConfig("internal-server")
+    val extServerConfig = colConfig.getConfig("external-server")
 
-    val internalServerSettings =
-      ServerSettings.extract(serverConfig.withFallback(colConfig.getConfig("internal-server")))
-    val externalServerSettings =
-      ServerSettings.extract(serverConfig.withFallback(colConfig.getConfig("external-server")))
-    val serviceConfig = ServiceConfig.load(colConfig.getConfig("service.default"))
+    val internalServerSettings = ServerSettings.extract(intServerConfig.withFallback(serverConfig))
+    val internalServiceConfig = ServiceConfig.load(intServerConfig.withFallback(colConfig.getConfig("service.default")))
+
+    val externalServerSettings = ServerSettings.extract(extServerConfig.withFallback(serverConfig))
+    val externalServiceConfig = ServiceConfig.load(extServerConfig.withFallback(colConfig.getConfig("service.default")))
 
     implicit val io: IOSystem = getIOSystem(serviceName, colConfig, metricsEnabled)
 
     internalServerRef = Some(HttpServer.start(serviceName + "_internal",
-      internalServerSettings)(serverInit(serviceConfig, internal = true)))
+      internalServerSettings)(serverInit(internalServiceConfig, internal = true)))
     externalServerRef = Some(HttpServer.start(serviceName + "_external",
-      externalServerSettings)(serverInit(serviceConfig, internal = false)))
+      externalServerSettings)(serverInit(externalServiceConfig, internal = false)))
   }
 
   override def stop = {
