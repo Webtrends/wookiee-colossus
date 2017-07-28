@@ -9,11 +9,11 @@ import colossus.IOSystem
 import colossus.core.server.Server.ServerInfo
 import colossus.core.server.ServerStatus.Bound
 import colossus.core.{InitContext, ServerContext, ServerRef, ServerSettings}
-import colossus.metrics.{MetricReporterConfig, MetricSystem, OpenTsdbSender}
+import colossus.metrics.{CollectorConfig, MetricReporterConfig, MetricSystem, MetricSystemConfig, OpenTsdbSender, SystemMetricsConfig}
 import colossus.protocols.http.HttpHeaders
 import colossus.protocols.http.server.{HttpServer, Initializer, RequestHandler}
 import colossus.service.ServiceConfig
-import com.typesafe.config.Config
+import com.typesafe.config.{Config, ConfigFactory}
 import com.webtrends.harness.command.{Command, CommandHelper}
 import com.webtrends.harness.component.Component
 import com.webtrends.harness.component.colossus.ColossusManager._
@@ -53,7 +53,6 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
   def init(): Unit = {
     val colConfig = config.getConfig(ComponentName)
     val serviceName = colConfig.getString("service-name")
-    val metricsEnabled = Try(colConfig.getBoolean("metric.enabled")).getOrElse(false)
     val serverConfig = colConfig.getConfig("server")
     val intServerConfig = colConfig.getConfig("internal-server")
     val extServerConfig = colConfig.getConfig("external-server")
@@ -64,7 +63,8 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
     val externalServerSettings = ServerSettings.extract(extServerConfig.withFallback(serverConfig))
     val externalServiceConfig = ServiceConfig.load(extServerConfig.withFallback(colConfig.getConfig("service.default")))
 
-    implicit val io: IOSystem = getIOSystem(serviceName, colConfig, metricsEnabled)
+    val metricSystemConfig = getMetricSystemConfig(serviceName, config)
+    implicit val io: IOSystem = getIOSystem(serviceName, colConfig, metricSystemConfig)
 
     internalServerRef = Some(HttpServer.start(serviceName + "_internal",
       internalServerSettings)(serverInit(internalServiceConfig, internal = true)))
@@ -97,22 +97,42 @@ object ColossusManager {
   protected[colossus] var internalServerRef: Option[ServerRef] = None
   protected[colossus] var externalServerRef: Option[ServerRef] = None
 
-  def getInternalServer = internalServerRef.get
-  def getExternalServer = externalServerRef.get
+  def getInternalServer: ServerRef = internalServerRef.get
+  def getExternalServer: ServerRef = externalServerRef.get
 
   def getIOSystem(serviceName: String, config: Config,
-                          metricsEnabled: Boolean)(implicit system: ActorSystem): IOSystem = {
-    if (metricsEnabled) {
-      val metricsName = Try(config.getString("metric.name")).getOrElse(serviceName)
-      val metricsHost = config.getString("metric.host")
-      val metricsPort = config.getInt("metric.port")
-      val colossusMetricSystem = MetricSystem(metricsName)
-      val colossusMetricReporterConfig = MetricReporterConfig(Seq(OpenTsdbSender(
-        metricsHost, metricsPort
-      )))
-      colossusMetricSystem.collectionIntervals.get(1.minute).foreach(_.report(colossusMetricReporterConfig))
-      IOSystem(metricsName, config, Some(colossusMetricSystem))
-    } else IOSystem()
+                  metricSystemConfig: Option[MetricSystemConfig])(implicit system: ActorSystem): IOSystem = {
+    metricSystemConfig match {
+      case Some(msc) =>
+        val metricsName = Try(config.getString("metric.name")).getOrElse(serviceName)
+        val metricsHost = config.getString("metric.host")
+        val metricsPort = config.getInt("metric.port")
+        val colossusMetricSystem = MetricSystem(msc)
+        val colossusMetricReporterConfig = MetricReporterConfig(Seq(OpenTsdbSender(
+          metricsHost, metricsPort
+        )))
+        colossusMetricSystem.collectionIntervals.get(1.minute).foreach(_.report(colossusMetricReporterConfig))
+        IOSystem(metricsName, config, Some(colossusMetricSystem))
+      case _ => IOSystem()
+    }
+  }
+
+  def getMetricSystemConfig(serviceName: String, config: Config): Option[MetricSystemConfig] = {
+    import colossus.metrics.ConfigHelpers._
+
+    val enabled = Try(config.getBoolean(s"$ComponentName.metric.enabled")).getOrElse(false)
+    if (enabled) {
+      val colMetrics = config.getConfig(s"$ComponentName.colossus.metrics")
+      val metricConfig = colMetrics.withFallback(config.getConfig(MetricSystemConfig.ConfigRoot))
+      val metricIntervals = metricConfig.getFiniteDurations("system.collection-intervals")
+      val collectSystemMetrics = metricConfig.getBoolean("system.system-metrics.enabled")
+      val collectorConfig = CollectorConfig(metricIntervals, metricConfig, metricConfig.getConfig("system.collector-defaults"))
+      val systemMetricsConfig = SystemMetricsConfig(collectSystemMetrics, serviceName)
+
+      Some(MetricSystemConfig(enabled, serviceName, systemMetricsConfig, collectorConfig))
+    } else {
+      None
+    }
   }
 
   def serverHealth(serverRef: Option[ServerRef])(implicit ec: ExecutionContextExecutor): Future[HealthComponent] = serverRef match {
