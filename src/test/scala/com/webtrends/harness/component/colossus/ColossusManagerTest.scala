@@ -76,8 +76,11 @@ class ColossusManagerTest extends MockColossusService {
           | host = "host"
           | port = 4545
           |}
+          |colossus.metrics {
+          |}
         """.stripMargin)
-      ColossusManager.getIOSystem("IOTest", conf, metricsEnabled = true)
+      val systemMetricsConfig = ColossusManager.getMetricSystemConfig("IOTest", conf)
+      ColossusManager.getIOSystem("IOTest", conf, systemMetricsConfig)
     }
 
     "get not started health if server not up" in {
