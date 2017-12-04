@@ -1,11 +1,10 @@
 package com.webtrends.harness.component.colossus.handle
 
 import colossus.core.{AliveState, ServerContext}
-import colossus.protocols.http.server.RequestHandler
-import colossus.protocols.http.{HttpBody, HttpCodes, HttpHeader, HttpHeaders, HttpRequest, HttpResponse, HttpResponseHead, HttpVersion}
+import colossus.protocols.http.{HttpBody, HttpCodes, HttpHeader, HttpHeaders, HttpRequest, HttpResponse, HttpResponseHead, HttpVersion, RequestHandler}
 import colossus.service.{Callback, ServiceConfig}
 import com.webtrends.harness.component.colossus.http.Encoders
-import com.webtrends.harness.component.colossus.{ExternalColossusRouteContainer, InternalColossusRouteContainer}
+import com.webtrends.harness.component.colossus.{ColossusRouteContainer, ExternalColossusRouteContainer, InternalColossusRouteContainer}
 import org.json4s.Formats
 import org.json4s.jackson.Serialization
 
@@ -17,8 +16,8 @@ class HttpRequestHandler(context: ServerContext,
                          internal: Boolean)(implicit execution: ExecutionContextExecutor = Implicits.global)
   extends RequestHandler(context, config) with Encoders {
   import HttpBody._
-  val serialization = Serialization
-  val container = if (internal) InternalColossusRouteContainer else ExternalColossusRouteContainer
+  val serialization: Serialization.type = Serialization
+  val container: ColossusRouteContainer = if (internal) InternalColossusRouteContainer else ExternalColossusRouteContainer
 
   // Main routing workhorse, goes through all routes we've currently registered
   override protected def handle: PartialFunction[HttpRequest, Callback[HttpResponse]] = {
@@ -37,18 +36,16 @@ class HttpRequestHandler(context: ServerContext,
   // All marshalling takes place here, using the Formats found on the response (or DefaultFormats)
   def marshall(body: AnyRef, fmt: Formats, responseType: String): HttpBody = {
     body match {
-      case t: Throwable => HttpBody(t, responseType)
+      case t: Throwable => HttpBody(t)
       case hb: HttpBody => hb
       case _ =>
         responseType.split(";")(0).trim match {
-          case "text/plain" =>
-            HttpBody(body.toString, responseType)
-          case "text/xml" =>
-            HttpBody(body.toString, responseType)
+          case "text/plain" | "text/xml" =>
+            HttpBody(body.toString)
           case _ => body match {
             case s: String if s.isEmpty => HttpBody.NoBody
-            case s: String => HttpBody(s, responseType)
-            case _ => HttpBody(serialization.write(body)(fmt), responseType)
+            case s: String => HttpBody(s)
+            case _ => HttpBody(serialization.write(body)(fmt))
           }
         }
     }

@@ -9,11 +9,11 @@ import colossus.IOSystem
 import colossus.core.server.Server.ServerInfo
 import colossus.core.server.ServerStatus.Bound
 import colossus.core.{InitContext, ServerContext, ServerRef, ServerSettings}
-import colossus.metrics.{CollectorConfig, MetricReporterConfig, MetricSystem, MetricSystemConfig, OpenTsdbSender, SystemMetricsConfig}
-import colossus.protocols.http.HttpHeaders
-import colossus.protocols.http.server.{HttpServer, Initializer, RequestHandler}
+import colossus.metrics.senders.OpenTsdbSender
+import colossus.metrics.{CollectorConfig, MetricReporterConfig, MetricSystem, MetricSystemConfig, SystemMetricsConfig}
+import colossus.protocols.http.{HttpHeaders, HttpServer, Initializer, RequestHandler}
 import colossus.service.ServiceConfig
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.Config
 import com.webtrends.harness.command.{Command, CommandHelper}
 import com.webtrends.harness.component.Component
 import com.webtrends.harness.component.colossus.ColossusManager._
@@ -44,7 +44,7 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
       addCommandWithProps(s, Props(c, args :_*))
   }
 
-  override def start = {
+  override def start: Unit = {
     init()
     addCommand(CoreColossusCommand.CommandName, classOf[CoreColossusCommand])
     super.start
@@ -72,7 +72,7 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
       externalServerSettings)(serverInit(externalServiceConfig, internal = false)))
   }
 
-  override def stop = {
+  override def stop: Unit = {
     ColossusManager.internalServerRef.foreach(_.die())
     ColossusManager.externalServerRef.foreach(_.die())
     super.stop
