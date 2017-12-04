@@ -18,6 +18,7 @@ class TestCommand extends Command with ColossusCommand with Encoders {
   override def routeExposure = RouteExposure.EXTERNAL
 
   implicit object TestRefEncoder extends HttpBodyEncoder[TestRef] {
+    override def contentType: Option[String] = None
     override def encode(data: TestRef): HttpBody = AnyRefEncoder.encode(data)
   }
 

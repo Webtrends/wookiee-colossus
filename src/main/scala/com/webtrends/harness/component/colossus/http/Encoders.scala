@@ -9,10 +9,15 @@ trait Encoders {
 
     implicit val formats: Formats = DefaultFormats
 
+    override def contentType: Option[String] = None
+
     override def encode(data: AnyRef): HttpBody = HttpBody(data.toString)
   }
 
   implicit object ThrowableEncoder extends HttpBodyEncoder[Throwable] with HttpBodyEncoders {
+
+    override def contentType: Option[String] = None
+
     def encode(t: Throwable): HttpBody = ByteStringEncoder.encode(ByteString(t.getMessage))
   }
 }
