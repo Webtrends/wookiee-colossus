@@ -7,6 +7,7 @@ import com.webtrends.harness.component.colossus.command.TestCommandBoth
 import com.webtrends.harness.component.colossus.mock.MockColossusService
 import com.webtrends.harness.health.{ComponentState, HealthComponent}
 import com.webtrends.harness.service.messages.CheckHealth
+import com.webtrends.harness.service.test.TestHarness
 import org.scalatest.DoNotDiscover
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -84,7 +85,7 @@ class ColossusManagerTest extends MockColossusService {
     }
 
     "get not started health if server not up" in {
-      ColossusManager.serverHealth(None) onComplete {
+      ColossusManager.serverHealth(None)(TestHarness.system.get.dispatcher) onComplete {
         case Success(hc) =>
           hc.state.equals(ComponentState.CRITICAL) mustEqual true
       }

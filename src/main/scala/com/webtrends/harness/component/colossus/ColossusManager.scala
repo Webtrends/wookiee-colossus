@@ -85,7 +85,7 @@ class ColossusManager(name:String) extends Component(name) with CommandHelper {
     Future.sequence(List(intHealth, extHealth)) onComplete {
       case Success(succ) =>
         p success HealthComponent(ComponentName, details = "Colossus Component Up", components = succ)
-      case Failure(f) =>
+      case Failure(_) =>
         p success HealthComponent(ComponentName, ComponentState.CRITICAL, "Could not get health of servers")
     }
     p.future
@@ -157,10 +157,11 @@ object ColossusManager {
   private val notStartedHealth = Future.successful(
     HealthComponent(ComponentName, ComponentState.CRITICAL, "could not find colossus server"))
 
-  private def serverInit(serviceConfig: ServiceConfig, internal: Boolean): InitContext => Initializer = { init =>
+  private def serverInit(serviceConfig: ServiceConfig, internal: Boolean)(implicit exec: ExecutionContextExecutor):
+    InitContext => Initializer = { init =>
     new Initializer(init) {
       override val defaultHeaders: HttpHeaders = HttpHeaders()
-      override def onConnect: (ServerContext) => RequestHandler = serverContext => new HttpRequestHandler(
+      override def onConnect: ServerContext => RequestHandler = serverContext => new HttpRequestHandler(
         serverContext, serviceConfig, internal
       )
     }
