@@ -8,12 +8,11 @@ import com.webtrends.harness.component.colossus.{ColossusRouteContainer, Externa
 import org.json4s.Formats
 import org.json4s.jackson.Serialization
 
-import scala.concurrent.ExecutionContext.Implicits
 import scala.concurrent.ExecutionContextExecutor
 
 class HttpRequestHandler(context: ServerContext,
                          config: ServiceConfig,
-                         internal: Boolean)(implicit execution: ExecutionContextExecutor = Implicits.global)
+                         internal: Boolean)(implicit execution: ExecutionContextExecutor)
   extends RequestHandler(context, config) with Encoders {
   import HttpBody._
   val serialization: Serialization.type = Serialization
